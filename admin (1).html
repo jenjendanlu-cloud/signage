@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>數位看板管理後台</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg:#0d0d10;--bg2:#16161a;--bg3:#1e1e24;
+    --border:#2a2a35;--text:#eeeef2;--text2:#888899;
+    --accent:#6c63ff;--adim:rgba(108,99,255,0.15);
+    --green:#22c55e;--red:#ef4444;--amber:#f59e0b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+  header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+  .logo{font-size:16px;font-weight:600;display:flex;align-items:center;gap:10px}
+  .dot{width:9px;height:9px;background:var(--accent);border-radius:50%;animation:blink 2s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+  .hinfo{font-size:12px;color:var(--text2);display:flex;gap:16px}
+  .layout{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 58px)}
+  aside{background:var(--bg2);border-right:1px solid var(--border);padding:20px 0}
+  .nlabel{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);padding:0 18px;margin-bottom:4px}
+  .nitem{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13.5px;color:var(--text2);cursor:pointer;transition:.15s;border-left:2px solid transparent}
+  .nitem:hover{background:var(--bg3);color:var(--text)}
+  .nitem.active{background:var(--adim);color:#a8a3ff;border-left-color:var(--accent)}
+  .content{padding:30px 36px}
+  .page{display:none}.page.active{display:block}
+  h2{font-size:20px;font-weight:600;margin-bottom:4px}
+  .sub{color:var(--text2);font-size:13px;margin-bottom:24px}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px 24px;margin-bottom:20px}
+  .ctitle{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:16px}
+  .srow{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px}
+  .scard{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+  .slabel{font-size:11px;color:var(--text2);font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px}
+  .sval{font-size:28px;font-weight:600}.sval.g{color:var(--green)}.sval.a{color:var(--amber)}
+  .upzone{border:2px dashed var(--border);border-radius:10px;padding:48px 24px;text-align:center;cursor:pointer;transition:.2s;position:relative}
+  .upzone:hover,.upzone.over{border-color:var(--accent);background:var(--adim)}
+  .upzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .upzone p{color:var(--text2);font-size:14px}.upzone strong{color:var(--accent)}
+  .pbar{background:var(--bg3);border-radius:4px;height:6px;margin-top:8px;overflow:hidden}
+  .pfill{height:100%;background:var(--accent);border-radius:4px;transition:width .3s}
+  .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px}
+  .mitem{background:var(--bg3);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;transition:.2s;position:relative}
+  .mitem:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .mitem.sel{border-color:var(--accent);outline:2px solid var(--accent)}
+  .mthumb{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#000}
+  .mvthumb{width:100%;aspect-ratio:16/9;background:#111;display:flex;align-items:center;justify-content:center;font-size:26px}
+  .minfo{padding:8px 10px}
+  .mname{font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .msize{font-size:10px;color:var(--text2);margin-top:2px}
+  .mcheck{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;background:var(--accent);display:none;align-items:center;justify-content:center;font-size:12px}
+  .mitem.sel .mcheck{display:flex}
+  .mdel{position:absolute;top:6px;left:6px;width:22px;height:22px;border-radius:50%;background:rgba(239,68,68,.85);display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;opacity:0;transition:.15s;color:#fff}
+  .mitem:hover .mdel{opacity:1}
+  .apanel{background:var(--bg2);border:1px solid var(--accent);border-radius:10px;padding:18px 22px;margin-bottom:24px;display:none}
+  .apanel.vis{display:block}
+  .atitle{font-size:14px;font-weight:600;margin-bottom:14px;color:var(--accent)}
+  .adevs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .adbtn{padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;background:var(--bg3);border:1px solid var(--border);color:var(--text2);transition:.15s}
+  .adbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .adbtn.ch{background:var(--adim);border-color:var(--accent);color:#a8a3ff}
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+  .dcard{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px;transition:.2s}
+  .dcard:hover{border-color:#444}
+  .dheader{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .dname{font-size:14px;font-weight:600}.did{font-size:11px;color:var(--text2)}
+  .sdot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+  .son .sdot{background:var(--green);box-shadow:0 0 6px var(--green)}.soff .sdot{background:var(--text2)}
+  .stxt{font-size:11px}.son .stxt{color:var(--green)}.soff .stxt{color:var(--text2)}
+  .plabel{font-size:11px;color:var(--text2);margin-bottom:6px}
+  .pitems{display:flex;flex-wrap:wrap;gap:4px;min-height:28px;margin-bottom:12px}
+  .ptag{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:3px 8px 3px 6px;font-size:11px;display:flex;align-items:center;gap:4px}
+  .ptag .rm{color:var(--text2);cursor:pointer;font-size:13px}.ptag .rm:hover{color:var(--red)}
+  .empty-pl{color:var(--text2);font-size:12px;font-style:italic}
+  .btn{padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:.15s}
+  .bp{background:var(--accent);color:#fff}.bp:hover{background:#7c74ff}
+  .bsm{padding:5px 12px;font-size:12px}
+  .bo{background:transparent;border:1px solid var(--border);color:var(--text2)}.bo:hover{border-color:var(--accent);color:var(--accent)}
+  .urlbox{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:13px;font-family:monospace;color:#a8a3ff;word-break:break-all;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+  .cpbtn{padding:5px 12px;font-size:11px;border-radius:4px;background:var(--adim);border:1px solid var(--accent);color:#a8a3ff;cursor:pointer;white-space:nowrap;transition:.15s}
+  .cpbtn:hover{background:var(--accent);color:#fff}
+  .steps{counter-reset:step}
+  .step{display:flex;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border)}
+  .step:last-child{border-bottom:none}
+  .stepn{counter-increment:step;min-width:26px;height:26px;border-radius:50%;background:var(--adim);border:1px solid var(--accent);color:#a8a3ff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .stepn::before{content:counter(step)}
+  .stepb{font-size:13px;color:var(--text2);line-height:1.6}.stepb strong{color:var(--text)}
+  code{background:var(--bg3);padding:2px 6px;border-radius:3px;font-size:12px;color:#a8a3ff}
+  .empty{text-align:center;padding:48px 0;color:var(--text2);font-size:14px}
+  .empty .ej{font-size:36px;margin-bottom:12px}
+  .toast{position:fixed;bottom:28px;right:28px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;font-size:13px;box-shadow:0 4px 24px rgba(0,0,0,.5);transform:translateY(60px);opacity:0;transition:.3s;z-index:999}
+  .toast.show{transform:translateY(0);opacity:1}
+  .toast.success{border-left:3px solid var(--green)}.toast.error{border-left:3px solid var(--red)}
+  @media(max-width:768px){.layout{grid-template-columns:1fr}aside{display:none}.stats{grid-template-columns:repeat(2,1fr)}.content{padding:20px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><div class="dot"></div>看板管理系統</div>
+  <div class="hinfo"><span id="hon">⚡ 載入中...</span><span id="hmed">🖼 0 個媒體</span></div>
+</header>
+<div class="layout">
+  <aside>
+    <div style="margin-bottom:24px">
+      <div class="nlabel">主選單</div>
+      <div class="nitem active" onclick="showPage('dashboard',this)"><span>📊</span> 總覽</div>
+      <div class="nitem" onclick="showPage('media',this)"><span>🖼</span> 媒體庫</div>
+      <div class="nitem" onclick="showPage('devices',this)"><span>📺</span> 裝置管理</div>
+    </div>
+    <div>
+      <div class="nlabel">說明</div>
+      <div class="nitem" onclick="showPage('deploy',this)"><span>🚀</span> 部署說明</div>
+    </div>
+  </aside>
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <h2>總覽</h2><p class="sub">所有裝置及媒體的即時狀態</p>
+      <div class="stats">
+        <div class="scard"><div class="slabel">裝置總數</div><div class="sval">10</div></div>
+        <div class="scard"><div class="slabel">上線中</div><div class="sval g" id="s-online">-</div></div>
+        <div class="scard"><div class="slabel">媒體檔案</div><div class="sval" id="s-media">0</div></div>
+        <div class="scard"><div class="slabel">已指派播單</div><div class="sval a" id="s-assigned">0</div></div>
+      </div>
+      <div class="card"><div class="ctitle">裝置狀態概覽</div><div class="dgrid" id="dash-dev"></div></div>
+    </div>
+
+    <!-- MEDIA -->
+    <div class="page" id="page-media">
+      <h2>媒體庫</h2><p class="sub">上傳圖片或影片，然後指派給指定裝置</p>
+      <div class="apanel" id="apanel">
+        <div class="atitle">📌 指派選取的媒體到裝置</div>
+        <div class="adevs" id="adevlist"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn bp bsm" onclick="assignMedia()">✓ 確認指派</button>
+          <button class="btn bo bsm" onclick="clearSel()">取消</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ctitle">上傳媒體</div>
+        <div class="upzone" id="upzone">
+          <input type="file" accept="image/*,video/*" multiple onchange="handleFiles(this.files)">
+          <div style="font-size:36px;margin-bottom:12px">☁️</div>
+          <p><strong>點擊或拖曳</strong>上傳圖片 / 影片</p>
+          <p style="font-size:12px;margin-top:6px">支援 JPG、PNG、GIF、MP4、MOV</p>
+        </div>
+        <div id="upprog" style="margin-top:12px;display:none">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:4px" id="upstatus">上傳中...</div>
+          <div class="pbar"><div class="pfill" id="pfill" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="srow">
+          <div class="ctitle" style="margin:0">媒體檔案 <span id="selcount" style="color:var(--accent);font-size:11px;margin-left:8px"></span></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn bo bsm" onclick="selAll()">全選</button>
+            <button class="btn bp bsm" id="abtn" onclick="showAssignPanel()" disabled>指派到裝置</button>
+          </div>
+        </div>
+        <div class="mgrid" id="mgrid"><div class="empty" style="grid-column:1/-1"><div class="ej">🖼</div><div>尚未上傳任何媒體</div></div></div>
+      </div>
+    </div>
+
+    <!-- DEVICES -->
+    <div class="page" id="page-devices">
+      <h2>裝置管理</h2><p class="sub">管理 10 台 X96 MAX ULTRA 的播放清單</p>
+      <div class="dgrid" id="dev-grid"></div>
+    </div>
+
+    <!-- DEPLOY -->
+    <div class="page" id="page-deploy">
+      <h2>部署說明</h2><p class="sub">各台 X96 的播放端網址</p>
+      <div class="card"><div class="ctitle">播放網址（貼到 Fully Kiosk Browser）</div><div id="purls"></div></div>
+      <div class="card">
+        <div class="ctitle">設定步驟</div>
+        <div class="steps">
+          <div class="step"><div class="stepn"></div><div class="stepb">將 <code>admin.html</code> 和 <code>player.html</code> 上傳到 <strong>GitHub Pages</strong> 或任何靜態網站</div></div>
+          <div class="step"><div class="stepn"></div><div class="stepb">在每台 X96 安裝 <strong>Fully Kiosk Browser</strong> APK，設定開機自動全螢幕開啟對應播放網址</div></div>
+          <div class="step"><div class="stepn"></div><div class="stepb">回到此後台上傳媒體 → 選取 → 指派給各台裝置，<strong>裝置端約 5 秒內自動更新</strong></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const SURL = 'https://tfrvnmlbrxeaqhvftpoo.supabase.co';
+const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmcnZubWxicnhlYXFodmZ0cG9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NjQ2MTAsImV4cCI6MjA5MTI0MDYxMH0.149qaXpEUjp4AnAxe15vSp6J72xIkKY24W0_Snwk5fA';
+const { createClient } = supabase;
+const sb = createClient(SURL, SKEY);
+
+const DIDS = Array.from({length:10},(_,i)=>`device${i+1}`);
+const DLABELS = ['門口螢幕','大廳左','大廳右','會議室A','會議室B','走廊1','走廊2','餐廳','倉庫','停車場'];
+
+let media=[], devs={}, selMedia=[], selDevs=[];
+
+async function init(){
+  await loadMedia(); await loadDevs();
+  renderUrls();
+  setInterval(loadDevs, 8000);
+}
+
+async function loadMedia(){
+  const {data}=await sb.from('media').select('*').order('uploaded_at',{ascending:false});
+  media=data||[]; renderMedia(); updateStats();
+}
+
+async function loadDevs(){
+  const {data}=await sb.from('devices').select('*');
+  const now=Date.now(); devs={};
+  (data||[]).forEach(d=>{ devs[d.id]={...d,online:d.last_seen&&(now-d.last_seen)<30000}; });
+  renderDashDev(); renderDevGrid(); updateStats();
+}
+
+function updateStats(){
+  const on=Object.values(devs).filter(d=>d.online).length;
+  const ass=Object.values(devs).filter(d=>d.playlist&&d.playlist.length>0).length;
+  document.getElementById('s-online').textContent=on;
+  document.getElementById('s-media').textContent=media.length;
+  document.getElementById('s-assigned').textContent=ass;
+  document.getElementById('hon').textContent=`⚡ ${on}/10 台上線`;
+  document.getElementById('hmed').textContent=`🖼 ${media.length} 個媒體`;
+}
+
+// UPLOAD
+const uz=document.getElementById('upzone');
+uz.addEventListener('dragover',e=>{e.preventDefault();uz.classList.add('over')});
+uz.addEventListener('dragleave',()=>uz.classList.remove('over'));
+uz.addEventListener('drop',e=>{e.preventDefault();uz.classList.remove('over');handleFiles(e.dataTransfer.files)});
+function handleFiles(files){[...files].forEach(uploadFile)}
+
+async function uploadFile(file){
+  const prog=document.getElementById('upprog');
+  const st=document.getElementById('upstatus');
+  const pf=document.getElementById('pfill');
+  prog.style.display='block'; st.textContent=`上傳中：${file.name}`; pf.style.width='20%';
+  const ext=file.name.split('.').pop();
+  const id='m_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+  const path=`${id}.${ext}`;
+  const {error:ue}=await sb.storage.from('media').upload(path,file,{upsert:false});
+  if(ue){showToast('上傳失敗：'+ue.message,'error');prog.style.display='none';return;}
+  pf.style.width='75%';
+  const {data:ud}=sb.storage.from('media').getPublicUrl(path);
+  const type=file.type.startsWith('video')?'video':'image';
+  await sb.from('media').insert({id,name:file.name,url:ud.publicUrl,type,size:Math.round(file.size/1024)+' KB',uploaded_at:Date.now()});
+  pf.style.width='100%';
+  showToast(`✓ ${file.name} 上傳成功`,'success');
+  setTimeout(()=>{prog.style.display='none';pf.style.width='0%'},600);
+  await loadMedia();
+}
+
+// MEDIA GRID
+function renderMedia(){
+  const g=document.getElementById('mgrid');
+  if(!media.length){g.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="ej">🖼</div><div>尚未上傳任何媒體</div></div>';return;}
+  g.innerHTML=media.map(m=>`
+    <div class="mitem ${selMedia.includes(m.id)?'sel':''}" onclick="togMedia('${m.id}')">
+      <div class="mdel" onclick="delMedia(event,'${m.id}')">✕</div>
+      <div class="mcheck">✓</div>
+      ${m.type==='video'?`<div class="mvthumb">▶️</div>`:`<img class="mthumb" src="${m.url}" loading="lazy">`}
+      <div class="minfo"><div class="mname">${m.name}</div><div class="msize">${m.type==='video'?'🎬':'🖼'} ${m.size}</div></div>
+    </div>`).join('');
+  document.getElementById('selcount').textContent=selMedia.length>0?`已選 ${selMedia.length} 個`:'';
+}
+function togMedia(id){const i=selMedia.indexOf(id);if(i>=0)selMedia.splice(i,1);else selMedia.push(id);renderMedia();document.getElementById('abtn').disabled=selMedia.length===0;}
+function selAll(){selMedia=media.map(m=>m.id);renderMedia();document.getElementById('abtn').disabled=false;}
+function clearSel(){selMedia=[];selDevs=[];renderMedia();document.getElementById('apanel').classList.remove('vis');document.getElementById('abtn').disabled=true;}
+async function delMedia(e,id){e.stopPropagation();if(!confirm('確定要刪除？'))return;await sb.from('media').delete().eq('id',id);showToast('已刪除','success');await loadMedia();}
+
+// ASSIGN
+function showAssignPanel(){
+  if(!selMedia.length)return;
+  selDevs=[];
+  document.getElementById('apanel').classList.add('vis');
+  document.getElementById('adevlist').innerHTML=`
+    <div class="adbtn" style="background:var(--accent);border-color:var(--accent);color:#fff" onclick="selAllDevs()">全部裝置</div>
+    ${DIDS.map((id,i)=>`<div class="adbtn" id="adb-${id}" onclick="togDev('${id}')">${DLABELS[i]}</div>`).join('')}`;
+  document.getElementById('apanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function selAllDevs(){selDevs=[...DIDS];DIDS.forEach(id=>document.getElementById('adb-'+id)?.classList.add('ch'));}
+function togDev(id){const el=document.getElementById('adb-'+id);const i=selDevs.indexOf(id);if(i>=0){selDevs.splice(i,1);el.classList.remove('ch');}else{selDevs.push(id);el.classList.add('ch');}}
+async function assignMedia(){
+  if(!selDevs.length){showToast('請選擇至少一台裝置','error');return;}
+  for(const did of selDevs){
+    const ex=devs[did]?.playlist||[];
+    const merged=[...new Set([...ex,...selMedia])];
+    await sb.from('devices').update({playlist:merged}).eq('id',did);
+  }
+  showToast(`✓ 已指派到 ${selDevs.length} 台裝置`,'success');
+  clearSel(); await loadDevs();
+}
+
+// DEVICE GRIDS
+function renderDashDev(){
+  document.getElementById('dash-dev').innerHTML=DIDS.map((id,i)=>{
+    const d=devs[id]||{};
+    return`<div class="dcard" style="cursor:default">
+      <div class="dheader">
+        <div style="font-size:20px">📺</div>
+        <div><div class="dname">${DLABELS[i]}</div><div class="did">${(d.playlist||[]).length} 個媒體</div></div>
+        <div class="${d.online?'son':'soff'}" style="margin-left:auto"><span class="sdot"></span><span class="stxt">${d.online?'上線':'離線'}</span></div>
+      </div></div>`;}).join('');
+}
+function renderDevGrid(){
+  document.getElementById('dev-grid').innerHTML=DIDS.map((id,i)=>{
+    const d=devs[id]||{};const pl=d.playlist||[];
+    return`<div class="dcard">
+      <div class="dheader">
+        <div style="font-size:20px">📺</div>
+        <div><div class="dname">${DLABELS[i]}</div><div class="did">${id}</div></div>
+        <div class="${d.online?'son':'soff'}" style="margin-left:auto"><span class="sdot"></span><span class="stxt">${d.online?'上線':'離線'}</span></div>
+      </div>
+      <div class="plabel">播放清單（${pl.length} 個）</div>
+      <div class="pitems">${pl.length===0?'<span class="empty-pl">尚未指派媒體</span>':pl.map(mid=>{const m=media.find(x=>x.id===mid);return m?`<div class="ptag">${m.type==='video'?'🎬':'🖼'} ${m.name.substring(0,10)}${m.name.length>10?'...':''}<span class="rm" onclick="rmPl('${id}','${mid}')">×</span></div>`:''}).join('')}</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn bo bsm" onclick="clrPl('${id}')">清空播單</button>
+      </div></div>`;}).join('');
+}
+async function rmPl(did,mid){const l=(devs[did]?.playlist||[]).filter(id=>id!==mid);await sb.from('devices').update({playlist:l}).eq('id',did);showToast('已移除','success');await loadDevs();}
+async function clrPl(did){if(!confirm('確定清空播單？'))return;await sb.from('devices').update({playlist:[]}).eq('id',did);showToast('播單已清空','success');await loadDevs();}
+
+// URLS
+function renderUrls(){
+  const base=window.location.href.replace('admin.html','player.html');
+  document.getElementById('purls').innerHTML=DIDS.map((id,i)=>`
+    <div style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${DLABELS[i]}</div>
+      <div class="urlbox"><span>${base}?device=${id}</span><span class="cpbtn" onclick="cp('${base}?device=${id}')">複製</span></div>
+    </div>`).join('');
+}
+function cp(t){navigator.clipboard.writeText(t).then(()=>showToast('✓ 已複製','success'));}
+
+function showPage(name,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nitem').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  el.classList.add('active');
+}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>t.classList.remove('show'),3500);}
+
+init();
+</script>
+</body>
+</html>
